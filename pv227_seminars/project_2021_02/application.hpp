@@ -27,10 +27,18 @@ protected:
     Snowman snowman;
     /** The buffer with the snowman. */
     SnowmanUBO snowman_ubo;
+    /** The positions of all particles (on GPU).*/
+    GLuint particle_positions_bo;
+    /**	The positions of all particles (on CPU).*/
+    std::vector<glm::vec4> particle_positions;
+    /** VAOs for rendering particles */
+    GLuint particle_vao;
 
     // ----------------------------------------------------------------------------
     // Variables (Textures)
     // ----------------------------------------------------------------------------
+    GLuint particle_tex;
+
 protected:
     // ----------------------------------------------------------------------------
     // Variables (Light)
@@ -47,6 +55,9 @@ protected:
     // ----------------------------------------------------------------------------
     // Variables (Shaders)
     // ----------------------------------------------------------------------------
+
+    ShaderProgram particle_textured_program;
+
 protected:
     // ----------------------------------------------------------------------------
     // Variables (Frame Buffers)
@@ -58,6 +69,8 @@ protected:
 protected:
     /** The number of iterations. */
     int reflections = 3;
+
+    const int max_snow_count = 131072;
 
     /** The desired snow particle count. */
     int desired_snow_count = 4096;
@@ -128,6 +141,8 @@ public:
     /** Resizes the full screen textures match the window. */
     void resize_fullscreen_textures();
 
+    void reset_particles();
+
     // ----------------------------------------------------------------------------
     // Update
     // ----------------------------------------------------------------------------
@@ -142,6 +157,8 @@ public:
 public:
     /** @copydoc DefaultApplication::render */
     void render() override;
+
+    void render_snow();
 
     /** Renders the snowman using rasterization. */
     void raster_snowman();

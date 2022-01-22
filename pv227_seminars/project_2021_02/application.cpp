@@ -24,6 +24,13 @@ Application::~Application() {
 void Application::compile_shaders() {
     default_unlit_program = ShaderProgram(shaders_path / "object.vert", shaders_path / "unlit.frag");
     default_lit_program = ShaderProgram(shaders_path / "object.vert", shaders_path / "lit.frag");
+    
+    particle_textured_program = ShaderProgram();
+    particle_textured_program.add_vertex_shader(shaders_path / "particle_textured.vert");
+    particle_textured_program.add_fragment_shader(shaders_path / "particle_textured.frag");
+    particle_textured_program.add_geometry_shader(shaders_path / "particle_textured.geom");
+    particle_textured_program.link();
+    
     std::cout << "Shaders are reloaded." << std::endl;
 }
 
@@ -54,6 +61,9 @@ void Application::prepare_materials() {
 }
 
 void Application::prepare_textures() {
+    particle_tex = TextureUtils::load_texture_2d(textures_path / "star.png");
+    TextureUtils::set_texture_2d_parameters(particle_tex, GL_REPEAT, GL_REPEAT, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR);
+
 }
 
 void Application::prepare_lights() {
@@ -80,6 +90,21 @@ void Application::prepare_snowman() {
 
 void Application::prepare_scene() {
     snowman_ubo = SnowmanUBO(snowman, GL_DYNAMIC_STORAGE_BIT);
+
+    // Allocates GPU buffers.
+    glCreateBuffers(1, &particle_positions_bo);
+    glNamedBufferStorage(particle_positions_bo, sizeof(float) * 4 * max_snow_count, nullptr, GL_DYNAMIC_STORAGE_BIT);
+   
+    // Initialize positions and velocities, and uploads them into OpenGL buffers.
+    reset_particles();
+
+    glCreateVertexArrays(1, &particle_vao);
+
+    glVertexArrayVertexBuffer(particle_vao, 0, particle_positions_bo, 0, 4 * sizeof(float));
+
+    glEnableVertexArrayAttrib(particle_vao, 0);
+    glVertexArrayAttribFormat(particle_vao, 0, 4, GL_FLOAT, GL_FALSE, 0);
+    glVertexArrayAttribBinding(particle_vao, 0, 0);
 }
 
 void Application::prepare_framebuffers() {
@@ -113,7 +138,30 @@ void Application::update(float delta) {
         phong_lights_ubo.add(light);
     }
     phong_lights_ubo.update_opengl_data();
+
+    if (desired_snow_count != current_snow_count) {
+        current_snow_count = desired_snow_count;
+        reset_particles();
+    }
 }
+
+void Application::reset_particles() {
+    // Sets the seed. We set it here to ensure that though all particles are at random places, they are always at the same places when they are reset.
+    srand(69769);
+    particle_positions.resize(desired_snow_count, glm::vec4(0.0f));
+    // The points are uniformly distributed on the surface of a unit sphere, and their initial velocity is zero.
+    for (int i = 0; i < current_snow_count; i++) {
+        const float alpha = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 2.0f * static_cast<float>(M_PI);
+        const float beta = asinf(static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 2.0f - 1.0f);
+        glm::vec3 point_in_cube = glm::vec3(cosf(alpha) * cosf(beta), sinf(alpha) * cosf(beta), sinf(beta));
+
+        particle_positions[i] = glm::vec4(point_in_cube, 1.0f);
+    }
+
+    // Updates the OpenGL buffers.
+    glNamedBufferSubData(particle_positions_bo, 0, sizeof(glm::vec4) * current_snow_count, particle_positions.data());
+}
+
 
 // ----------------------------------------------------------------------------
 // Render
@@ -136,6 +184,9 @@ void Application::render() {
     phong_lights_ubo.bind_buffer_base(PhongLightsUBO::DEFAULT_LIGHTS_BINDING);
 
     raster_snowman();
+    if (show_snow) {
+        render_snow();
+    }
 
     // Resets the VAO and the program.
     glBindVertexArray(0);
@@ -151,6 +202,21 @@ void Application::render() {
     GLuint64 render_time;
     glGetQueryObjectui64v(render_time_query, GL_QUERY_RESULT, &render_time);
     fps_gpu = 1000.f / (static_cast<float>(render_time) * 1e-6f);
+}
+
+void Application::render_snow() {
+
+    particle_textured_program.use();
+    particle_textured_program.uniform("particle_size_vs", 0.5f);
+    particle_textured_program.uniform("time", static_cast<float>(elapsed_time));
+    glBindTextureUnit(0, particle_tex);
+
+    // Binds the proper VAO (we use the VAO with the data we just wrote).
+    glBindVertexArray(particle_vao);
+    // Draws the particles as points.
+    glPointSize(1.0f);
+    glDrawArrays(GL_POINTS, 0, current_snow_count);
+
 }
 
 void Application::raster_snowman() {
