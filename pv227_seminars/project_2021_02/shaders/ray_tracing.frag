@@ -52,10 +52,12 @@ struct PBRMaterialData{
     vec3 f0;
 };
 
+const int snowman_sphere_count = 13;
+
 layout (std140, binding = 4) uniform Snowman
 {
-	vec4[13] positions;
-	PBRMaterialData[13] materials;
+	vec4 positions[snowman_sphere_count];
+	PBRMaterialData materials[snowman_sphere_count];
 } snowman;
 
 // The windows size.
@@ -64,6 +66,8 @@ uniform vec2 resolution;
 uniform int spheres_count;
 // The number of iterations.
 uniform int iterations;
+
+uniform bool use_ambient_occlusion;
 
 // ----------------------------------------------------------------------------
 // Output Variables
@@ -120,7 +124,7 @@ Hit RaySphereIntersection(Ray ray, vec3 center, float radius, int i) {
 
 	vec3 intersection = ray.origin + t * ray.direction;
 	vec3 normal = normalize(intersection - center);
-    return Hit(t, intersection, normal, snowman.materials[i+1]);
+    return Hit(t, intersection, normal, snowman.materials[i]);
 }
 
 // Computes an intersection between a ray and a plane defined by its normal and one point inside the plane.
@@ -168,13 +172,50 @@ Hit Evaluate(Ray ray){
     return closest_hit;
 }
 
+// ----------------------------------------------------------------------------
+// Ambient occlusion
+// ----------------------------------------------------------------------------
+float sphere_occlusion(vec3 position, vec3 normal, vec4 sphere)
+{
+	// taken from https://www.shadertoy.com/view/4djSDy
+	vec3 di = sphere.xyz - position;
+	float l  = length(di);
+	float nl = dot(normal, di / l);
+	float h  = l / sphere.w;
+	float h2 = h * h;
+	float k2 = 1.0 - h2 * nl * nl;
+
+	// above or below the hemisphere
+	float res = max(0.0, nl) / h2;
+
+	// intersecting the hemisphere
+	if(k2 > 0.0) {
+		res = (nl * h + 1.0)/h2;
+		res = 0.33 * res * res;
+	}
+
+	return res;
+}
+
+float occlude_ambient(vec3 position, vec3 normal)
+{
+	float occlusion = 0.0f;
+	for (int i = 0; i < snowman_sphere_count; ++i) {
+		occlusion += sphere_occlusion(position, normal, snowman.positions[i]);
+	}
+	return 1.0f - occlusion;
+}
+
 // Traces the ray trough the scene and accumulates the color.
 vec3 Trace(Ray ray) {
     // The accumulated color and attenuation used when tracing the rays throug the scene.
 	vec3 color = vec3(0.0);
     vec3 attenuation = vec3(1.0);
 	// The direction towards the light.
-	vec3 L = normalize(lights[0].position.xyz);
+	vec3 L1 = normalize(lights[0].position.xyz);
+	vec3 L2 = normalize(lights[1].position.xyz);
+	vec3 L3 = normalize(lights[2].position.xyz);
+
 	// Due to floating-point precision errors, when a ray intersects geometry at a surface, the point of intersection could possibly be just below the surface.
 	// The subsequent reflection and shadow rays would then bounce off the *inside* wall of the surface. This is known as self-intersection.
 	// We, therefore, use a small epsilon to offset the subsequent rays.
@@ -190,7 +231,7 @@ vec3 Trace(Ray ray) {
 	//         The surface normal is in the hit.normal
 	//         The direction towards light is in the L vector.
 	//         The light color is in the lights[0].diffuse
-	color = max(dot(hit.normal, L), 0.0) * lights[0].diffuse * hit.material.diffuse;
+	color = max(dot(hit.normal, L1), 0.0) * lights[0].diffuse * hit.material.diffuse;
 
 	// TASK 3: Generate secondary rays (reflections only) and accumulate the color from each ray.
 	//  Hints: Use the Evaluate() method you have implemented before to get the closest hit for each ray.
@@ -209,6 +250,7 @@ vec3 Trace(Ray ray) {
 	//         Accumulate the skybox color only once - e.g., use 'break;' to finish the iterations early
 	//         Also note that if you use 'break;' you are breaking the uniform flow, thus you have to use textureLod method.
 	color = vec3(0,0,0);
+	float occluded_ambient = 1.0;
     for (int i = 0; i < iterations; ++i) {
         Hit hit = Evaluate(ray);
         if (hit != miss) {
@@ -216,13 +258,29 @@ vec3 Trace(Ray ray) {
 			//color += max(dot(hit.normal, L), 0.0) * lights[0].diffuse * hit.material.diffuse;
 
 			// TASK 4 + 5
-			Ray shadow_ray = Ray(hit.intersection + epsilon * L, L); 
-			vec3 fresnel = FresnelSchlick(hit.material.f0, hit.normal, -ray.direction); 
-			if(Evaluate(shadow_ray) == miss) {
-				color += max(dot(hit.normal, L), 0.0) * lights[0].diffuse * hit.material.diffuse * (1.0 - fresnel) * attenuation; 
-			}
-			attenuation *= fresnel; 
+			Ray shadow_ray1 = Ray(hit.intersection + epsilon * L1, L1); 
+			Ray shadow_ray2 = Ray(hit.intersection + epsilon * L2, L2); 
+			Ray shadow_ray3 = Ray(hit.intersection + epsilon * L3, L3); 
 
+
+			vec3 fresnel = FresnelSchlick(hit.material.f0, hit.normal, -ray.direction); 
+			if(Evaluate(shadow_ray1) == miss) {
+				color += max(dot(hit.normal, L1), 0.0) * lights[0].diffuse / 3.0f * hit.material.diffuse * (1.0 - fresnel) * attenuation; 
+			}
+			
+			if(Evaluate(shadow_ray2) == miss) {
+				color += max(dot(hit.normal, L2), 0.0) * lights[1].diffuse / 3.0f * hit.material.diffuse * (1.0 - fresnel) * attenuation; 
+			}
+
+			if(Evaluate(shadow_ray3) == miss) {
+				color += max(dot(hit.normal, L3), 0.0) * lights[2].diffuse / 3.0f * hit.material.diffuse * (1.0 - fresnel) * attenuation; 
+			}
+			attenuation *= fresnel;
+
+			if (i == 0 && use_ambient_occlusion) {
+				// ambient occlusion occurs in the first iteration only
+				occluded_ambient = occlude_ambient(hit.intersection, hit.normal);
+			}
 			// TASK 3
             vec3 reflection = reflect(ray.direction, hit.normal);
             ray = Ray(hit.intersection + epsilon * reflection, reflection);
@@ -231,8 +289,9 @@ vec3 Trace(Ray ray) {
         }
     }
 
-    return color;
+    return color * occluded_ambient;
 }
+
 
 // ----------------------------------------------------------------------------
 // Main Method

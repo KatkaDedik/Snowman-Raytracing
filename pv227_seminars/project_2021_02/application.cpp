@@ -237,6 +237,7 @@ void Application::raytrace_snowman() {
     ray_tracing_program.use();
     ray_tracing_program.uniform("resolution", glm::vec2(width, height));
     ray_tracing_program.uniform("spheres_count", static_cast<int>(13));
+    ray_tracing_program.uniform("use_ambient_occlusion", use_ambient_occlusion);
     int iterations = 10;
     ray_tracing_program.uniform("iterations", iterations);
 
