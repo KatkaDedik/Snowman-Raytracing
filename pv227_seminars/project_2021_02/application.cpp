@@ -238,8 +238,8 @@ void Application::raytrace_snowman() {
     ray_tracing_program.uniform("resolution", glm::vec2(width, height));
     ray_tracing_program.uniform("spheres_count", static_cast<int>(13));
     ray_tracing_program.uniform("use_ambient_occlusion", use_ambient_occlusion);
-    int iterations = 10;
-    ray_tracing_program.uniform("iterations", iterations);
+    ray_tracing_program.uniform("iterations", reflections);
+    ray_tracing_program.uniform("sphere_light_radius", sphere_light_radius);
 
     // Binds the data with the camera and the lights.
     camera_ubo.bind_buffer_base(CameraUBO::DEFAULT_CAMERA_BINDING);

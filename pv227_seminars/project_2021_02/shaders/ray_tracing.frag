@@ -53,7 +53,6 @@ struct PBRMaterialData{
 };
 
 const int snowman_sphere_count = 13;
-
 layout (std140, binding = 4) uniform Snowman
 {
 	vec4 positions[snowman_sphere_count];
@@ -62,12 +61,12 @@ layout (std140, binding = 4) uniform Snowman
 
 // The windows size.
 uniform vec2 resolution;
-// The number of spheres to render.
-uniform int spheres_count;
 // The number of iterations.
 uniform int iterations;
 
 uniform bool use_ambient_occlusion;
+
+uniform float sphere_light_radius;
 
 // ----------------------------------------------------------------------------
 // Output Variables
@@ -82,6 +81,7 @@ layout (location = 0) out vec4 final_color;
 struct Ray {
     vec3 origin;     // The ray origin.
     vec3 direction;  // The ray direction.
+	bool ignore_lights;
 };
 // The definition of an intersection.
 struct Hit {
@@ -89,8 +89,9 @@ struct Hit {
 	vec3 intersection;        // The intersection point.
     vec3 normal;              // The surface normal at the interesection point.
 	PBRMaterialData material; // The material of the object at the intersection point.
+	int light_index;
 };
-const Hit miss = Hit(1e20, vec3(0.0), vec3(0.0), PBRMaterialData(vec3(0),0,vec3(0)));
+const Hit miss = Hit(1e20, vec3(0.0), vec3(0.0), PBRMaterialData(vec3(0),0,vec3(0)), -1);
 
 // ----------------------------------------------------------------------------
 // Local Methods
@@ -108,7 +109,7 @@ vec3 FresnelSchlick(in vec3 f0, in vec3 V, in vec3 H)
 // center - the center of the sphere
 // radius - the radius of the sphere
 // i - the index of the sphere in the array, can be used to obtain the material from materials buffer
-Hit RaySphereIntersection(Ray ray, vec3 center, float radius, int i) {
+Hit RaySphereIntersection(Ray ray, vec3 center, float radius, int i, bool is_snowman) {
 
 	// Optimalized version.
 	vec3 oc = ray.origin - center;
@@ -124,7 +125,12 @@ Hit RaySphereIntersection(Ray ray, vec3 center, float radius, int i) {
 
 	vec3 intersection = ray.origin + t * ray.direction;
 	vec3 normal = normalize(intersection - center);
-    return Hit(t, intersection, normal, snowman.materials[i]);
+	if (is_snowman) {
+		return Hit(t, intersection, normal, snowman.materials[i], -1);
+	} else {
+		PBRMaterialData light_material = { lights[i].diffuse, 0.0f, vec3(0) };
+		return Hit(t, intersection, normal, light_material, i);
+	}
 }
 
 // Computes an intersection between a ray and a plane defined by its normal and one point inside the plane.
@@ -142,33 +148,35 @@ Hit RayPlaneIntersection(Ray ray, vec3 normal, vec3 point) {
 
 	vec3 intersection = ray.origin + t * ray.direction;
 	
-	// TASK 7 (Optional): Make the plane extend only to a limited distance (i.e., make it square or circle).
-	// circle
-	// if(length(intersection) > 30) return miss;
-	// square
-	if(intersection.x > 40 || intersection.x < -40 || intersection.z > 40 || intersection.z < -40) return miss;
+	if(intersection.x > 100 || intersection.x < -100 || intersection.z > 100 || intersection.z < -100)
+		return miss;
 
-    return Hit(t, intersection, normal, snowman.materials[0]);
+    return Hit(t, intersection, normal, snowman.materials[0], -1);
 }
 
 // Evaluates the intersections of the ray with the scene objects and returns the closes hit.
 Hit Evaluate(Ray ray){
 	// Sets the closes hit either to miss or to an intersection with the plane representing the ground.
 	Hit closest_hit = RayPlaneIntersection(ray, vec3(0, 1, 0), vec3(0));
-	
-	// TASK 1: Iterate over all spheres, compute the intersection of the ray with each sphere and return the intersection closest to the camera.  
-	//  Hints: Use function 'RaySphereIntersection' (after you implement it).
-	//         See the definition of the Hit structure above.
-	//         'spheres_count' contains the number of spheres
-	//         'spheres[i].xyz' contains the i-th sphere position 
-	//         'spheres[i].w' contains the i-th sphere radius
-	for(int i = 0; i < spheres_count; i++){
+
+	for(int i = 0; i < snowman_sphere_count; i++){
 		vec3 center = snowman.positions[i].xyz;
-		Hit intersection = RaySphereIntersection(ray, center, snowman.positions[i].w, i);
+		Hit intersection = RaySphereIntersection(ray, center, snowman.positions[i].w, i, true);
 		if(intersection.t < closest_hit.t){
 			closest_hit = intersection;
 		}
 	}
+
+	if (!ray.ignore_lights) {
+		for(int i = 0; i < lights_count; i++){
+			vec3 center = lights[i].position.xyz / lights[i].position.w;
+			Hit intersection = RaySphereIntersection(ray, center, sphere_light_radius, i, false);
+			if(intersection.t < closest_hit.t){
+				closest_hit = intersection;
+			}
+		}
+	}
+
     return closest_hit;
 }
 
@@ -211,69 +219,32 @@ vec3 Trace(Ray ray) {
     // The accumulated color and attenuation used when tracing the rays throug the scene.
 	vec3 color = vec3(0.0);
     vec3 attenuation = vec3(1.0);
-	// The direction towards the light.
-	vec3 L1 = normalize(lights[0].position.xyz);
-	vec3 L2 = normalize(lights[1].position.xyz);
-	vec3 L3 = normalize(lights[2].position.xyz);
 
 	// Due to floating-point precision errors, when a ray intersects geometry at a surface, the point of intersection could possibly be just below the surface.
 	// The subsequent reflection and shadow rays would then bounce off the *inside* wall of the surface. This is known as self-intersection.
 	// We, therefore, use a small epsilon to offset the subsequent rays.
 	const float epsilon = 1e-2;
 
-	// TASK 1: At this moment we only pass the ray to Evaluate method and return the unlit color of the closest object.
-	//  Hints: Nothing to implement here.
-	Hit hit = Evaluate(ray);
-	color = hit.material.diffuse;
-	
-	// TASK 2: Simulate the perfect Lambertian surface (you can use the Blinn-Phong model).
-	//	Hints: The material diffuse color is in hit.material.diffuse
-	//         The surface normal is in the hit.normal
-	//         The direction towards light is in the L vector.
-	//         The light color is in the lights[0].diffuse
-	color = max(dot(hit.normal, L1), 0.0) * lights[0].diffuse * hit.material.diffuse;
-
-	// TASK 3: Generate secondary rays (reflections only) and accumulate the color from each ray.
-	//  Hints: Use the Evaluate() method you have implemented before to get the closest hit for each ray.
-	//         See the definition of the Hit structure above.
-	
-	// TASK 4: Utilize the physical-based propagation of the light using FresnelSchlick approximation.
-	//  Hints: Use FresnelSchlick method implemented above - use hit.material.f0 as the reflected light in 0°
-
-	// TASK 5: Add shadows.
-	//  Hints: To avoid numerical errors, offset the ray by a small epsilon towards the light or along the normal.
-	//         To check if the ray did not hit anything you can use if(Evaluate(ray) == miss){...}
-
-	// TASK 6: Add the sky.
-	//  Hints: The skybox cubemap texture is stored in 'skybox_tex'.
-	//         Do not forget to use attenuation based on the FresnelSchlick approximation
-	//         Accumulate the skybox color only once - e.g., use 'break;' to finish the iterations early
-	//         Also note that if you use 'break;' you are breaking the uniform flow, thus you have to use textureLod method.
-	color = vec3(0,0,0);
 	float occluded_ambient = 1.0;
     for (int i = 0; i < iterations; ++i) {
         Hit hit = Evaluate(ray);
         if (hit != miss) {
-			// TASK 3
-			//color += max(dot(hit.normal, L), 0.0) * lights[0].diffuse * hit.material.diffuse;
-
-			// TASK 4 + 5
-			Ray shadow_ray1 = Ray(hit.intersection + epsilon * L1, L1); 
-			Ray shadow_ray2 = Ray(hit.intersection + epsilon * L2, L2); 
-			Ray shadow_ray3 = Ray(hit.intersection + epsilon * L3, L3); 
-
-
+			if (hit.light_index >= 0) {
+				color += hit.material.diffuse * attenuation;
+			}
 			vec3 fresnel = FresnelSchlick(hit.material.f0, hit.normal, -ray.direction); 
-			if(Evaluate(shadow_ray1) == miss) {
-				color += max(dot(hit.normal, L1), 0.0) * lights[0].diffuse / 3.0f * hit.material.diffuse * (1.0 - fresnel) * attenuation; 
-			}
-			
-			if(Evaluate(shadow_ray2) == miss) {
-				color += max(dot(hit.normal, L2), 0.0) * lights[1].diffuse / 3.0f * hit.material.diffuse * (1.0 - fresnel) * attenuation; 
-			}
-
-			if(Evaluate(shadow_ray3) == miss) {
-				color += max(dot(hit.normal, L3), 0.0) * lights[2].diffuse / 3.0f * hit.material.diffuse * (1.0 - fresnel) * attenuation; 
+			for (int i = 0; i < lights_count; ++i) {
+				vec3 L = normalize(lights[i].position.xyz / lights[i].position.w - hit.intersection);
+				Ray shadow_ray = Ray(hit.intersection + epsilon * L, L, true);
+				Hit shadow_hit = Evaluate(shadow_ray);
+				if (shadow_hit == miss) {
+					color += max(dot(hit.normal, L), 0.0)
+						* lights[i].diffuse
+						* hit.material.diffuse
+						* (1.0 - fresnel)
+						* attenuation
+						/ lights_count;
+				}
 			}
 			attenuation *= fresnel;
 
@@ -283,7 +254,7 @@ vec3 Trace(Ray ray) {
 			}
 			// TASK 3
             vec3 reflection = reflect(ray.direction, hit.normal);
-            ray = Ray(hit.intersection + epsilon * reflection, reflection);
+            ray = Ray(hit.intersection + epsilon * reflection, reflection, false);
         } else {
 			break;
         }
@@ -319,7 +290,7 @@ void main()
 	// Computes the ray origin and ray direction using the view matrix.
 	vec3 P = vec3(view_inv * vec4(uv, -1.0, 1.0));
 	vec3 direction = normalize(P - eye_position);
-	Ray ray = Ray(eye_position, direction);
+	Ray ray = Ray(eye_position, direction, false);
 
 	// We pass the ray to the trace function.
 	vec3 color = Trace(ray);
