@@ -81,7 +81,7 @@ layout (location = 0) out vec4 final_color;
 struct Ray {
     vec3 origin;     // The ray origin.
     vec3 direction;  // The ray direction.
-	bool ignore_lights;
+	int light_mask;
 };
 // The definition of an intersection.
 struct Hit {
@@ -138,9 +138,6 @@ Hit RaySphereIntersection(Ray ray, vec3 center, float radius, int i, bool is_sno
 // normal - the plane normal
 // point - a point laying in the plane
 Hit RayPlaneIntersection(Ray ray, vec3 normal, vec3 point) {
-	// TASK 1: Compute the intersection between the ray and a plane.
-	//  Hints: Use materials[0] as the material in the returned hit.
-	//         Return 'miss' object defined above if there is no intersection.
 	float nd = dot(normal, ray.direction);
 	vec3 sp = point - ray.origin;
 	float t = dot(sp, normal) / nd;
@@ -167,13 +164,14 @@ Hit Evaluate(Ray ray){
 		}
 	}
 
-	if (!ray.ignore_lights) {
-		for(int i = 0; i < lights_count; i++){
-			vec3 center = lights[i].position.xyz / lights[i].position.w;
-			Hit intersection = RaySphereIntersection(ray, center, sphere_light_radius, i, false);
-			if(intersection.t < closest_hit.t){
-				closest_hit = intersection;
-			}
+	for(int i = 0; i < lights_count; i++){
+		if ((ray.light_mask & (1 << i)) == 0) {
+			continue;
+		}
+		vec3 center = lights[i].position.xyz / lights[i].position.w;
+		Hit intersection = RaySphereIntersection(ray, center, sphere_light_radius, i, false);
+		if(intersection.t < closest_hit.t){
+			closest_hit = intersection;
 		}
 	}
 
@@ -235,9 +233,9 @@ vec3 Trace(Ray ray) {
 			vec3 fresnel = FresnelSchlick(hit.material.f0, hit.normal, -ray.direction); 
 			for (int i = 0; i < lights_count; ++i) {
 				vec3 L = normalize(lights[i].position.xyz / lights[i].position.w - hit.intersection);
-				Ray shadow_ray = Ray(hit.intersection + epsilon * L, L, true);
+				Ray shadow_ray = Ray(hit.intersection + epsilon * L, L, 1 << i);
 				Hit shadow_hit = Evaluate(shadow_ray);
-				if (shadow_hit == miss) {
+				if (shadow_hit.light_index == i) {
 					color += max(dot(hit.normal, L), 0.0)
 						* lights[i].diffuse
 						* hit.material.diffuse
@@ -252,9 +250,9 @@ vec3 Trace(Ray ray) {
 				// ambient occlusion occurs in the first iteration only
 				occluded_ambient = occlude_ambient(hit.intersection, hit.normal);
 			}
-			// TASK 3
+
             vec3 reflection = reflect(ray.direction, hit.normal);
-            ray = Ray(hit.intersection + epsilon * reflection, reflection, false);
+            ray = Ray(hit.intersection + epsilon * reflection, reflection, -1);
         } else {
 			break;
         }
@@ -273,16 +271,6 @@ void main()
 	// It tells us how many times the window is wider (or narrower) w.r.t. its height.
 	float aspect_ratio = resolution.x/resolution.y;
 
-	// TASK 1: Generate the primary ray and pass it to the Trace function.
-	//  Hints: You can use in_data.tex_coord or gl_FragCoord.xy to obtain the fragment position P on the screen (x,y coordinates).
-	//         Think about the 'z' coordinate, where the point P should be positioned?
-	//         Do not forget that you need to transform the fragment position to the range <(-1,-1),(1,1)> 
-	//             in_data.tex_coord is in range <(0,0),(1,1)> while gl_FragCoord.xy is in range <(0,0),(widht,height)>
-	//         Use the aspect_ratio to properly scale the fragment position to non-rectanglural window.
-	//		   'S' from slides is in eye_position
-	//         Do not forget to apply the view matrix (or rather its inversion) to the point P.
-	//         Do not forget to normalize the direction vector.
-
 	// We use the texture coordinates and the aspect ratio to map the coordinates to the screen space.
 	vec2 uv = (2.0*in_data.tex_coord - 1.0) * vec2(aspect_ratio, 1.0);
 	//vec2 uv = (2.0*gl_FragCoord.xy / resolution.xy - 1.0) * vec2(aspect_ratio, 1.0);
@@ -290,7 +278,7 @@ void main()
 	// Computes the ray origin and ray direction using the view matrix.
 	vec3 P = vec3(view_inv * vec4(uv, -1.0, 1.0));
 	vec3 direction = normalize(P - eye_position);
-	Ray ray = Ray(eye_position, direction, false);
+	Ray ray = Ray(eye_position, direction, -1);
 
 	// We pass the ray to the trace function.
 	vec3 color = Trace(ray);
