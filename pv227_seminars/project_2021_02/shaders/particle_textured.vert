@@ -33,7 +33,8 @@ out VertexData
 // ----------------------------------------------------------------------------
 void main()
 {
-	// TASK 4: Pass the color and the position in view space into the geometry shader.
-	float tmp = time;
-	out_data.position_vs = view * start_position;
+	vec4 new_position = start_position;
+	new_position.y -= time * 0.001f;
+	new_position.y = mod(new_position.y, 10.0f);
+	out_data.position_vs = view * new_position;
 }
