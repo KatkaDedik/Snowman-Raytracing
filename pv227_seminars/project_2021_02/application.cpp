@@ -177,6 +177,13 @@ void Application::raster_snowman() {
         id++;
     }
 
+    // Render the floor
+    white_material_ubo.bind_buffer_base(PhongMaterialUBO::DEFAULT_MATERIAL_BINDING);
+    ModelUBO model_ubo(translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.1f, 0.0f)) * scale(glm::mat4(1.0f), glm::vec3(10.0f, 0.1f, 10.0f)));
+    model_ubo.bind_buffer_base(ModelUBO::DEFAULT_MODEL_BINDING);
+    cube.bind_vao();
+    cube.draw();
+
     // Renders the lights.
     for (int i = 0; i < 3; i++) {
         default_unlit_program.use();
