@@ -186,14 +186,22 @@ void Application::render() {
 
     // Clears the framebuffer color.
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClearDepth(1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
+
+    //ray_tracing_gpu();
 
     // Binds the the camera and the lights buffers.
     camera_ubo.bind_buffer_base(CameraUBO::DEFAULT_CAMERA_BINDING);
     phong_lights_ubo.bind_buffer_base(PhongLightsUBO::DEFAULT_LIGHTS_BINDING);
 
-    raster_snowman();
+    if (use_raytracing) {
+        raytrace_snowman();
+    }
+    else {
+        raster_snowman();
+    }
     if (show_snow) {
         render_snow();
     }
@@ -213,6 +221,40 @@ void Application::render() {
     glGetQueryObjectui64v(render_time_query, GL_QUERY_RESULT, &render_time);
     fps_gpu = 1000.f / (static_cast<float>(render_time) * 1e-6f);
 }
+
+void Application::raytrace_snowman() {
+    // Binds the main window framebuffer.
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, width, height);
+
+    // Clears the framebuffer color.
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    // We do not need depth and depth test.
+    glDisable(GL_DEPTH_TEST);
+
+    // Uses the proper program.
+    ray_tracing_program.use();
+    ray_tracing_program.uniform("resolution", glm::vec2(width, height));
+    ray_tracing_program.uniform("spheres_count", static_cast<int>(13));
+    int iterations = 10;
+    ray_tracing_program.uniform("iterations", iterations);
+
+    // Binds the data with the camera and the lights.
+    camera_ubo.bind_buffer_base(CameraUBO::DEFAULT_CAMERA_BINDING);
+    phong_lights_ubo.bind_buffer_base(PhongLightsUBO::DEFAULT_LIGHTS_BINDING);
+
+    // Binds the buffers containing the information about the spheres (positions + radii and materials).
+    //glBindBufferBase(GL_UNIFORM_BUFFER, 4, snowman_ubo);
+    snowman_ubo.bind_buffer_base(4);
+
+    // Renders the full screen quad to evaluate every pixel.
+    // Binds an empty VAO as we do not need any state.
+    glBindVertexArray(empty_vao);
+    // Calls a draw command with 3 vertices that are generated in vertex shader.
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+}
+
 
 void Application::render_snow() {
     glEnable(GL_BLEND);
@@ -243,6 +285,8 @@ void Application::raster_snowman() {
 
         // Handles the textures.
         default_lit_program.uniform("has_texture", false);
+        default_lit_program.uniform("use_ambient_occlusion", use_ambient_occlusion);
+        snowman_ubo.bind_buffer_base(4);
         glBindTextureUnit(0, 0);
 
         // Note that the material are hard-coded here since the default lit shader works with PhongMaterial not PBRMaterial as defined in snowman.
@@ -310,6 +354,7 @@ void Application::render_ui() {
     ImGui::Checkbox("Show Snow", &show_snow);
 
     ImGui::Checkbox("Ambient Occlusion", &use_ambient_occlusion);
+    ImGui::Checkbox("Raytracing", &use_raytracing);
 
     ImGui::SliderFloat("Sphere Light Radius", &sphere_light_radius, 0, 1, "%.1f");
     ImGui::SliderInt("Shadow Quality", &shadow_samples, 1, 128);

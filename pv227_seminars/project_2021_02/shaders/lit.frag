@@ -13,23 +13,6 @@ in VertexData
 	vec2 tex_coord;		  // The vertex texture coordinates.
 } in_data;
 
-struct PBRMaterialData{
-	/** The diffuse color of the material. */
-    vec3 diffuse;
-    /** The roughness of the material. */
-    float roughness;
-    /** The Fresnel reflection at 0°. */
-    vec3 f0;
-    /** The padding to avoid problems with layouts - see PV112 lecture. */
-    float padding1;
-};
-
-layout (std140, binding = 1) uniform Snowman
-{
-	vec4[13] positions;
-	PBRMaterialData[13] materials;
-} snowman;
-
 // The UBO with camera data.	
 layout (std140, binding = 0) uniform CameraBuffer
 {
@@ -67,15 +50,33 @@ layout (std140, binding = 2) LIGHTS_STORAGE PhongLightsBuffer
 // The material data.
 layout (std140, binding = 3) uniform PhongMaterialBuffer
 {
-    vec3 ambient;     // The ambient part of the material.
-    vec3 diffuse;     // The diffuse part of the material.
-    float alpha;      // The alpha (transparency) of the material.
-    vec3 specular;    // The specular part of the material.
-    float shininess;  // The shininess of the material.
+	vec3 ambient;     // The ambient part of the material.
+	vec3 diffuse;     // The diffuse part of the material.
+	float alpha;      // The alpha (transparency) of the material.
+	vec3 specular;    // The specular part of the material.
+	float shininess;  // The shininess of the material.
 } material;
+
+struct PBRMaterialData{
+	/** The diffuse color of the material. */
+	vec3 diffuse;
+	/** The roughness of the material. */
+	float roughness;
+	/** The Fresnel reflection at 0°. */
+	vec3 f0;
+};
+
+const int snowman_sphere_count = 13;
+
+layout (std140, binding = 4) uniform Snowman
+{
+	vec4 positions[snowman_sphere_count];
+	PBRMaterialData materials[snowman_sphere_count];
+} snowman;
 
 // The flag determining whether a texture should be used.
 uniform bool has_texture;
+uniform bool use_ambient_occlusion;
 // The texture that will be used (if available).
 layout(binding = 0) uniform sampler2D material_diffuse_texture;
 
@@ -85,9 +86,37 @@ layout(binding = 0) uniform sampler2D material_diffuse_texture;
 // The final output color.
 layout (location = 0) out vec4 final_color;
 
-// ----------------------------------------------------------------------------
-// Main Method
-// ----------------------------------------------------------------------------
+float sphere_occlusion(vec3 position, vec3 normal, vec4 sphere)
+{
+	// taken from https://www.shadertoy.com/view/4djSDy
+	vec3 di = sphere.xyz - position;
+	float l  = length(di);
+	float nl = dot(normal, di / l);
+	float h  = l / sphere.w;
+	float h2 = h * h;
+	float k2 = 1.0 - h2 * nl * nl;
+
+	// above or below the hemisphere
+	float res = max(0.0, nl) / h2;
+
+	// intersecting the hemisphere
+	if(k2 > 0.0) {
+		res = (nl * h + 1.0)/h2;
+		res = 0.33 * res * res;
+	}
+
+	return res;
+}
+
+float occlude_ambient(vec3 position, vec3 normal)
+{
+	float occlusion = 0.0f;
+	for (int i = 0; i < snowman_sphere_count; ++i) {
+		occlusion += sphere_occlusion(position, normal, snowman.positions[i]);
+	}
+	return 1.0f - occlusion;
+}
+
 void main()
 {
 	// Computes the lighting.
@@ -155,6 +184,10 @@ void main()
 
 	// Computes the final light color.
 	vec3 final_light = mat_ambient * amb + mat_diffuse * dif + material.specular * spe;
+
+	if (use_ambient_occlusion) {
+		final_light *= occlude_ambient(in_data.position_ws, N);
+	}
 
 	// Outputs the final light color.
 	final_color = vec4(final_light, material.alpha);

@@ -86,6 +86,8 @@ protected:
     /** The flag determining if the ambient occlusion should be used. */
     bool use_ambient_occlusion = true;
 
+    bool use_raytracing = true;
+
     /** The number of shadow samples. */
     int shadow_samples = 16;
 
@@ -159,6 +161,8 @@ public:
 public:
     /** @copydoc DefaultApplication::render */
     void render() override;
+
+    void raytrace_snowman();
 
     void render_snow();
 

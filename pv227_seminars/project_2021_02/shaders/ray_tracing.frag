@@ -42,25 +42,21 @@ layout (std140, binding = 2) uniform PhongLightsBuffer
 	PhongLight lights[8];			// The array with actual lights.
 };
 
-// The material data.
-struct PBRMaterialData
-{
-   vec3 diffuse;     // The diffuse color of the material.
-   float roughness;  // The roughness of the material.
-   vec3 f0;          // The Fresnel reflection at 0°.
+
+struct PBRMaterialData{
+	/** The diffuse color of the material. */
+    vec3 diffuse;
+    /** The roughness of the material. */
+    float roughness;
+    /** The Fresnel reflection at 0°. */
+    vec3 f0;
 };
 
- // The buffer with individual materials for each sphere.
-layout (std140, binding = 3) uniform PBRMaterialBuffer
+layout (std140, binding = 4) uniform Snowman
 {
-   PBRMaterialData materials[3];
-};
-
-// The buffer with spheres.
-layout (std140, binding = 4) uniform SpheresBuffer
-{
-	vec4 spheres[3];
-};
+	vec4[13] positions;
+	PBRMaterialData[13] materials;
+} snowman;
 
 // The windows size.
 uniform vec2 resolution;
@@ -68,16 +64,6 @@ uniform vec2 resolution;
 uniform int spheres_count;
 // The number of iterations.
 uniform int iterations;
-
-// The skybox texture.
-layout (binding = 0) uniform samplerCube skybox_tex; 
-
-/** The flag determining if a tone mapping should be used. */
-uniform bool use_tone_mapping;
-/** The exposure value. */
-uniform float exposure;
-/** The gamma value. */
-uniform float gamma;
 
 // ----------------------------------------------------------------------------
 // Output Variables
@@ -119,31 +105,6 @@ vec3 FresnelSchlick(in vec3 f0, in vec3 V, in vec3 H)
 // radius - the radius of the sphere
 // i - the index of the sphere in the array, can be used to obtain the material from materials buffer
 Hit RaySphereIntersection(Ray ray, vec3 center, float radius, int i) {
-	// TASK 1: Compute the intersection between the ray and a sphere.
-	//  Hints: Remember elementary school:
-    //             det = b*b - 4*a*c
-	//             solution = (-b +- sqrt(det)) / 2*a
-	//         The normal can be computed as the direction between sphere center and the intersection point.
-	//         Use materials[i] as the material in the returned hit (materials[0] is dedicated for the floor).
-	//         Return 'miss' object defined above if there is no intersection.
-	//  Optimalization: You can take out the multiplications and divisions with 2 and 4 -> think how to update the original equation.
-
-	// Non-optimalized version.
-	//	vec3 oc = ray.origin - center;
-	//	float a = dot(ray.direction,ray.direction);
-	//	float b = 2 * dot(ray.direction, oc);
-	//	float c = dot(oc, oc) - (radius*radius);
-	//
-	//	float det = b*b - 4*a*c;
-	//	if (det < 0.0) return miss;
-	//
-	//	float t = (-b - sqrt(det)) / 2*a;
-	//	if (t < 0.0) t = (-b + sqrt(det)) / 2*a;
-	//	if (t < 0.0) return miss;
-	//
-	//	vec3 intersection = ray.origin + t * ray.direction;
-	//	vec3 normal = normalize(intersection - center);
-	//    return Hit(t, intersection, normal, materials[i+1]);
 
 	// Optimalized version.
 	vec3 oc = ray.origin - center;
@@ -159,7 +120,7 @@ Hit RaySphereIntersection(Ray ray, vec3 center, float radius, int i) {
 
 	vec3 intersection = ray.origin + t * ray.direction;
 	vec3 normal = normalize(intersection - center);
-    return Hit(t, intersection, normal, materials[i+1]);
+    return Hit(t, intersection, normal, snowman.materials[i+1]);
 }
 
 // Computes an intersection between a ray and a plane defined by its normal and one point inside the plane.
@@ -183,7 +144,7 @@ Hit RayPlaneIntersection(Ray ray, vec3 normal, vec3 point) {
 	// square
 	if(intersection.x > 40 || intersection.x < -40 || intersection.z > 40 || intersection.z < -40) return miss;
 
-    return Hit(t, intersection, normal, materials[0]);
+    return Hit(t, intersection, normal, snowman.materials[0]);
 }
 
 // Evaluates the intersections of the ray with the scene objects and returns the closes hit.
@@ -198,8 +159,8 @@ Hit Evaluate(Ray ray){
 	//         'spheres[i].xyz' contains the i-th sphere position 
 	//         'spheres[i].w' contains the i-th sphere radius
 	for(int i = 0; i < spheres_count; i++){
-		vec3 center = spheres[i].xyz;
-		Hit intersection = RaySphereIntersection(ray, center, spheres[i].w, i);
+		vec3 center = snowman.positions[i].xyz;
+		Hit intersection = RaySphereIntersection(ray, center, snowman.positions[i].w, i);
 		if(intersection.t < closest_hit.t){
 			closest_hit = intersection;
 		}
@@ -266,8 +227,6 @@ vec3 Trace(Ray ray) {
             vec3 reflection = reflect(ray.direction, hit.normal);
             ray = Ray(hit.intersection + epsilon * reflection, reflection);
         } else {
-			// TASK 6
-			color += attenuation * textureLod(skybox_tex, ray.direction, 0).rgb;
 			break;
         }
     }
@@ -305,12 +264,6 @@ void main()
 
 	// We pass the ray to the trace function.
 	vec3 color = Trace(ray);
-
-	// TASK 8 (Optional): Add tone mapping.
-	if(use_tone_mapping){
-		vec3 mapped = vec3(1.0f) - exp2(-color * exposure);
-		color = pow(mapped, vec3(1.0 / gamma));
-	}
 
 	final_color = vec4(color, 1.0);
 }
