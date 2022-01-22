@@ -61,7 +61,7 @@ void Application::prepare_materials() {
 }
 
 void Application::prepare_textures() {
-    particle_tex = TextureUtils::load_texture_2d(textures_path / "star.png");
+    particle_tex = TextureUtils::load_texture_2d(textures_path / "snowflake.png");
     TextureUtils::set_texture_2d_parameters(particle_tex, GL_REPEAT, GL_REPEAT, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR);
 
 }
@@ -151,11 +151,11 @@ void Application::reset_particles() {
     particle_positions.resize(desired_snow_count, glm::vec4(0.0f));
     // The points are uniformly distributed on the surface of a unit sphere, and their initial velocity is zero.
     for (int i = 0; i < current_snow_count; i++) {
-        const float alpha = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 2.0f * static_cast<float>(M_PI);
-        const float beta = asinf(static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 2.0f - 1.0f);
-        glm::vec3 point_in_cube = glm::vec3(cosf(alpha) * cosf(beta), sinf(alpha) * cosf(beta), sinf(beta));
+        float x = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 20.0f - 10.0f;
+        float y = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 20.0f;
+        float z = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 20.0f - 10.0f;
 
-        particle_positions[i] = glm::vec4(point_in_cube, 1.0f);
+        particle_positions[i] = glm::vec4(x,y,z, 1.0f);
     }
 
     // Updates the OpenGL buffers.
@@ -205,9 +205,11 @@ void Application::render() {
 }
 
 void Application::render_snow() {
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
 
     particle_textured_program.use();
-    particle_textured_program.uniform("particle_size_vs", 0.5f);
+    particle_textured_program.uniform("particle_size_vs", 0.2f);
     particle_textured_program.uniform("time", static_cast<float>(elapsed_time));
     glBindTextureUnit(0, particle_tex);
 
@@ -216,6 +218,8 @@ void Application::render_snow() {
     // Draws the particles as points.
     glPointSize(1.0f);
     glDrawArrays(GL_POINTS, 0, current_snow_count);
+
+    glDisable(GL_BLEND);
 
 }
 
