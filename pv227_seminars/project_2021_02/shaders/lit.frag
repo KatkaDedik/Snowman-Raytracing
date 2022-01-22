@@ -26,8 +26,8 @@ struct PBRMaterialData{
 
 layout (std140, binding = 1) uniform Snowman
 {
-	vec4[10] positions;
-	PBRMaterialData[10] materials;
+	vec4[13] positions;
+	PBRMaterialData[13] materials;
 } snowman;
 
 // The UBO with camera data.	

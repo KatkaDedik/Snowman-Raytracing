@@ -30,6 +30,8 @@ void Application::compile_shaders() {
     particle_textured_program.add_fragment_shader(shaders_path / "particle_textured.frag");
     particle_textured_program.add_geometry_shader(shaders_path / "particle_textured.geom");
     particle_textured_program.link();
+
+    ray_tracing_program = ShaderProgram(shaders_path / "full_screen_quad.vert", shaders_path / "ray_tracing.frag");
     
     std::cout << "Shaders are reloaded." << std::endl;
 }
@@ -48,6 +50,7 @@ void Application::prepare_cameras() {
 void Application::prepare_materials() {
     const PBRMaterialData snow_material = PBRMaterialData(glm::vec3(1), glm::vec3(0.04f), 1.0f);
     const PBRMaterialData coal_material = PBRMaterialData(glm::vec3(0.1), glm::vec3(0.004f), 1.0f);
+    const PBRMaterialData carrot_material = PBRMaterialData(glm::vec3(235.0f / 255.0f, 137.0f / 255.0f, 33.0f / 255.0f), glm::vec3(0.04f), 1.0f);
     snowman.materials[0] = snow_material;
     snowman.materials[1] = snow_material;
     snowman.materials[2] = snow_material;
@@ -58,6 +61,9 @@ void Application::prepare_materials() {
     snowman.materials[7] = coal_material;
     snowman.materials[8] = coal_material;
     snowman.materials[9] = coal_material;
+    snowman.materials[10] = carrot_material;
+    snowman.materials[11] = carrot_material;
+    snowman.materials[12] = carrot_material;
 }
 
 void Application::prepare_textures() {
@@ -86,6 +92,10 @@ void Application::prepare_snowman() {
     snowman.spheres[7] = glm::vec4(0.0f, 3.9f, 0.9f, 0.1f);
     snowman.spheres[8] = glm::vec4(0.0f, 3.5f, 1.0f, 0.1f);
     snowman.spheres[9] = glm::vec4(0.0f, 3.1f, 0.9f, 0.1f);
+    //carrot
+    snowman.spheres[10] = glm::vec4(0.0f, 5.0f, 0.7f, 0.15f);
+    snowman.spheres[11] = glm::vec4(0.0f, 5.0f, 0.85f, 0.12f);
+    snowman.spheres[12] = glm::vec4(0.0f, 5.0f, 1.0f, 0.08f);
 }
 
 void Application::prepare_scene() {
@@ -238,8 +248,11 @@ void Application::raster_snowman() {
         // Note that the material are hard-coded here since the default lit shader works with PhongMaterial not PBRMaterial as defined in snowman.
         if (id < 5) {
             white_material_ubo.bind_buffer_base(PhongMaterialUBO::DEFAULT_MATERIAL_BINDING);
-        } else {
+        } else if (id < 10){
             black_material_ubo.bind_buffer_base(PhongMaterialUBO::DEFAULT_MATERIAL_BINDING);
+        }
+        else {
+            red_material_ubo.bind_buffer_base(PhongMaterialUBO::DEFAULT_MATERIAL_BINDING);
         }
         model_ubo.bind_buffer_base(ModelUBO::DEFAULT_MODEL_BINDING);
         sphere.bind_vao();

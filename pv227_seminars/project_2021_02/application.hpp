@@ -5,7 +5,7 @@
 #include "pbr_material_ubo.hpp"
 
 /** The number of spheres forming the snowman. */
-const int snowman_size = 10;
+const int snowman_size = 13;
 
 /** The structure defining the snowman. */
 struct Snowman {
@@ -57,6 +57,8 @@ protected:
     // ----------------------------------------------------------------------------
 
     ShaderProgram particle_textured_program;
+
+    ShaderProgram ray_tracing_program;
 
 protected:
     // ----------------------------------------------------------------------------

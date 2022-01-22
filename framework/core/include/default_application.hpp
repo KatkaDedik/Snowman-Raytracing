@@ -82,6 +82,8 @@ protected:
     /** The UBO defining the gray material. */
     PhongMaterialUBO gray_material_ubo;
 
+    PhongMaterialUBO orange_material_ubo;
+
     // ----------------------------------------------------------------------------
     // Constructors
     // ----------------------------------------------------------------------------
