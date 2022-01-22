@@ -13,6 +13,23 @@ in VertexData
 	vec2 tex_coord;		  // The vertex texture coordinates.
 } in_data;
 
+struct PBRMaterialData{
+	/** The diffuse color of the material. */
+    vec3 diffuse;
+    /** The roughness of the material. */
+    float roughness;
+    /** The Fresnel reflection at 0°. */
+    vec3 f0;
+    /** The padding to avoid problems with layouts - see PV112 lecture. */
+    float padding1;
+};
+
+layout (std140, binding = 1) uniform Snowman
+{
+	vec4[10] positions;
+	PBRMaterialData[10] materials;
+} snowman;
+
 // The UBO with camera data.	
 layout (std140, binding = 0) uniform CameraBuffer
 {

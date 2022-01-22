@@ -151,9 +151,9 @@ void Application::reset_particles() {
     particle_positions.resize(desired_snow_count, glm::vec4(0.0f));
     // The points are uniformly distributed on the surface of a unit sphere, and their initial velocity is zero.
     for (int i = 0; i < current_snow_count; i++) {
-        float x = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 20.0f - 10.0f;
-        float y = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 20.0f;
-        float z = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 20.0f - 10.0f;
+        float x = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 60.0f - 30.0f;
+        float y = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 60.0f;
+        float z = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 60.0f - 30.0f;
 
         particle_positions[i] = glm::vec4(x,y,z, 1.0f);
     }
@@ -249,7 +249,7 @@ void Application::raster_snowman() {
 
     // Render the floor
     white_material_ubo.bind_buffer_base(PhongMaterialUBO::DEFAULT_MATERIAL_BINDING);
-    ModelUBO model_ubo(translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.1f, 0.0f)) * scale(glm::mat4(1.0f), glm::vec3(10.0f, 0.1f, 10.0f)));
+    ModelUBO model_ubo(translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.1f, 0.0f)) * scale(glm::mat4(1.0f), glm::vec3(30.0f, 0.1f, 30.0f)));
     model_ubo.bind_buffer_base(ModelUBO::DEFAULT_MODEL_BINDING);
     cube.bind_vao();
     cube.draw();
