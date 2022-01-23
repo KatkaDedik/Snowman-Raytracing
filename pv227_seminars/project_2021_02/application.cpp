@@ -231,7 +231,8 @@ void Application::raytrace_snowman() {
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     // We do not need depth and depth test.
-    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
 
     // Uses the proper program.
     ray_tracing_program.use();
@@ -260,6 +261,8 @@ void Application::raytrace_snowman() {
 void Application::render_snow() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
 
     particle_textured_program.use();
     particle_textured_program.uniform("particle_size_vs", 0.2f);

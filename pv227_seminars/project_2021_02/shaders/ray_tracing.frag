@@ -226,6 +226,17 @@ vec3 Trace(Ray ray) {
 	float occluded_ambient = 1.0;
     for (int i = 0; i < iterations; ++i) {
         Hit hit = Evaluate(ray);
+		if (i == 0)
+		{
+			if (hit == miss) {
+				gl_FragDepth = 1.0f;
+			} else {
+				float d = length(hit.intersection - ray.origin);
+				float near = projection[3][2] / (projection[2][2] - 1.0f);
+				float far = projection[3][2] / (projection[2][2] + 1.0f);
+				gl_FragDepth = (1 / d - 1 / near) / (1 / far - 1 / near);
+			}
+		}
         if (hit != miss) {
 			if (hit.light_index >= 0) {
 				color += hit.material.diffuse * attenuation;
