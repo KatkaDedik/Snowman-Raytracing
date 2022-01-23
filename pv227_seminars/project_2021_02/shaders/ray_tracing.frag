@@ -64,6 +64,8 @@ uniform vec2 resolution;
 // The number of iterations.
 uniform int iterations;
 
+uniform int shadow_samples;
+
 uniform bool use_ambient_occlusion;
 
 uniform float sphere_light_radius;
@@ -92,6 +94,9 @@ struct Hit {
 	int light_index;
 };
 const Hit miss = Hit(1e20, vec3(0.0), vec3(0.0), PBRMaterialData(vec3(0),0,vec3(0)), -1);
+
+const float epsilon = 1e-2;
+const float PI = 3.14159265359f;
 
 // ----------------------------------------------------------------------------
 // Local Methods
@@ -169,7 +174,7 @@ Hit Evaluate(Ray ray){
 			continue;
 		}
 		vec3 center = lights[i].position.xyz / lights[i].position.w;
-		Hit intersection = RaySphereIntersection(ray, center, sphere_light_radius, i, false);
+		Hit intersection = RaySphereIntersection(ray, center, sphere_light_radius + epsilon, i, false);
 		if(intersection.t < closest_hit.t){
 			closest_hit = intersection;
 		}
@@ -212,55 +217,109 @@ float occlude_ambient(vec3 position, vec3 normal)
 	return 1.0f - occlusion;
 }
 
+
+void HandleDepth(Hit hit, Ray ray)
+{
+	if (hit == miss) {
+		gl_FragDepth = 1.0f;
+	} else {
+		float d = length(hit.intersection - ray.origin);
+		float near = projection[3][2] / (projection[2][2] - 1.0f);
+		float far = projection[3][2] / (projection[2][2] + 1.0f);
+		gl_FragDepth = (1 / d - 1 / near) / (1 / far - 1 / near);
+	}
+}
+
+
+vec2 hash23(vec3 p3)
+{
+	p3 = fract(p3 * vec3(.1031, .1030, .0973));
+    p3 += dot(p3, p3.yzx+33.33);
+    return fract((p3.xx+p3.yz)*p3.zy);
+}
+
+
+vec3 ComputeShadowRay(Hit hit, vec3 color, vec3 fresnel, vec3 attenuation)
+{
+	for (int i = 0; i < lights_count; ++i) 
+	{
+		for (int j = 0; j < shadow_samples; j++)
+		{
+
+			vec3 L = lights[i].position.xyz / lights[i].position.w - hit.intersection;
+			
+			vec2 point_on_disk = vec2(0.0f);
+
+			vec3 toHash = vec3(hash23(L), float(j));
+			vec2 hash = hash23(toHash);
+
+			float light_radius = sphere_light_radius / length(L);
+
+			float radius = sqrt(hash.x) * light_radius;
+			float angle = hash.y * 2 * PI;
+
+			point_on_disk.x = radius * cos(angle);
+			point_on_disk.y = radius * sin(angle);
+
+			L = normalize(L);
+
+			vec3 light_tangent = normalize(cross(L, vec3(0.0f, -1.0f, 0.0f)));
+			vec3 light_bitangent = normalize(cross(light_tangent, L));
+
+			vec3 ray_dir = normalize(L + point_on_disk.x * light_tangent + point_on_disk.y * light_bitangent);
+
+			Ray shadow_ray = Ray(hit.intersection + epsilon * ray_dir, ray_dir, 1 << i);
+			Hit shadow_hit = Evaluate(shadow_ray);
+
+			if (shadow_hit.light_index == i) 
+			{
+				color += max(dot(hit.normal, ray_dir), 0.0)
+					* lights[i].diffuse
+					* hit.material.diffuse
+					* (1.0 - fresnel)
+					* attenuation
+					/ lights_count
+					/ shadow_samples;
+			}
+		}
+	}
+	return color;
+}
+
+
 // Traces the ray trough the scene and accumulates the color.
 vec3 Trace(Ray ray) {
     // The accumulated color and attenuation used when tracing the rays throug the scene.
 	vec3 color = vec3(0.0);
     vec3 attenuation = vec3(1.0);
-
-	// Due to floating-point precision errors, when a ray intersects geometry at a surface, the point of intersection could possibly be just below the surface.
-	// The subsequent reflection and shadow rays would then bounce off the *inside* wall of the surface. This is known as self-intersection.
-	// We, therefore, use a small epsilon to offset the subsequent rays.
-	const float epsilon = 1e-2;
-
 	float occluded_ambient = 1.0;
+
     for (int i = 0; i < iterations; ++i) {
         Hit hit = Evaluate(ray);
+
+		//Handle Depth and ambient occlusion in the first iteration
 		if (i == 0)
 		{
-			if (hit == miss) {
-				gl_FragDepth = 1.0f;
-			} else {
-				float d = length(hit.intersection - ray.origin);
-				float near = projection[3][2] / (projection[2][2] - 1.0f);
-				float far = projection[3][2] / (projection[2][2] + 1.0f);
-				gl_FragDepth = (1 / d - 1 / near) / (1 / far - 1 / near);
-			}
-		}
-        if (hit != miss) {
-			if (hit.light_index >= 0) {
-				color += hit.material.diffuse * attenuation;
-			}
-			vec3 fresnel = FresnelSchlick(hit.material.f0, hit.normal, -ray.direction); 
-			for (int i = 0; i < lights_count; ++i) {
-				vec3 L = normalize(lights[i].position.xyz / lights[i].position.w - hit.intersection);
-				Ray shadow_ray = Ray(hit.intersection + epsilon * L, L, 1 << i);
-				Hit shadow_hit = Evaluate(shadow_ray);
-				if (shadow_hit.light_index == i) {
-					color += max(dot(hit.normal, L), 0.0)
-						* lights[i].diffuse
-						* hit.material.diffuse
-						* (1.0 - fresnel)
-						* attenuation
-						/ lights_count;
-				}
-			}
-			attenuation *= fresnel;
+			HandleDepth(hit, ray);
 
-			if (i == 0 && use_ambient_occlusion) {
-				// ambient occlusion occurs in the first iteration only
+			if (use_ambient_occlusion) {
 				occluded_ambient = occlude_ambient(hit.intersection, hit.normal);
 			}
+		}
+
+        if (hit != miss) 
+		{
+
+			if (hit.light_index >= 0) 
+			{
+				color += hit.material.diffuse * attenuation;
+			}
+
+			vec3 fresnel = FresnelSchlick(hit.material.f0, hit.normal, -ray.direction); 
+
+			color = ComputeShadowRay(hit, color, fresnel, attenuation);
+
+			attenuation *= fresnel;
 
             vec3 reflection = reflect(ray.direction, hit.normal);
             ray = Ray(hit.intersection + epsilon * reflection, reflection, -1);

@@ -241,6 +241,7 @@ void Application::raytrace_snowman() {
     ray_tracing_program.uniform("use_ambient_occlusion", use_ambient_occlusion);
     ray_tracing_program.uniform("iterations", reflections);
     ray_tracing_program.uniform("sphere_light_radius", sphere_light_radius);
+    ray_tracing_program.uniform("shadow_samples", shadow_samples);
 
     // Binds the data with the camera and the lights.
     camera_ubo.bind_buffer_base(CameraUBO::DEFAULT_CAMERA_BINDING);
