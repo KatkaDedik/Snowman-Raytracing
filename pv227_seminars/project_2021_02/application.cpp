@@ -143,10 +143,16 @@ void Application::update(float delta) {
     positions[1] = glm::vec3(4, 4, 4) * glm::vec3(cosf(app_time_s - 3.14 / 2.0), 1, sinf(app_time_s + 3.14 / 2.0));
     positions[2] = glm::vec3(5, 2, 5) * glm::vec3(cosf(app_time_s), 1, sinf(app_time_s));
 
-    for (glm::vec3 light_position : positions) {
-        PhongLightData light = PhongLightData::CreatePointLight(light_position, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.1f), 1.0f, 0.0f, 0.0f);
+    //for (glm::vec3 light_position : positions) {
+    //    PhongLightData light = PhongLightData::CreatePointLight(light_position, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.1f), 1.0f, 0.0f, 0.0f);
+    //    phong_lights_ubo.add(light);
+    //}
+
+    for (int i = 0; i < positions.size(); i++) {
+        PhongLightData light = PhongLightData::CreatePointLight(positions[i], glm::vec3(0.0f), light_colors[i], glm::vec3(0.1f), 1.0f, 0.0f, 0.0f);
         phong_lights_ubo.add(light);
     }
+
     phong_lights_ubo.update_opengl_data();
 
     if (desired_snow_count != current_snow_count) {
@@ -261,7 +267,7 @@ void Application::raytrace_snowman() {
 
 void Application::render_snow() {
     glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
@@ -337,7 +343,7 @@ void Application::render_ui() {
     const float unit = ImGui::GetFontSize();
 
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoDecoration);
-    ImGui::SetWindowSize(ImVec2(20 * unit, 17 * unit));
+    ImGui::SetWindowSize(ImVec2(20 * unit, 50 * unit));
     ImGui::SetWindowPos(ImVec2(2 * unit, 2 * unit));
 
     ImGui::PushItemWidth(150.f);
@@ -366,6 +372,14 @@ void Application::render_ui() {
 
     ImGui::Checkbox("Corrective: Smooth Shadow Edges", &corrective_smooth_shadows);
     ImGui::Checkbox("Corrective: Rectangular Area Light", &corrective_rectangular_area_light);
+
+    ImGui::ColorPicker4("Light1 color", light1_color_array);
+    ImGui::ColorPicker4("Light2 color", light2_color_array);
+    ImGui::ColorPicker4("Light3 color", light3_color_array);
+
+    light_colors[0] = glm::vec4(light1_color_array[0], light1_color_array[1], light1_color_array[2], light1_color_array[3]);
+    light_colors[1] = glm::vec4(light2_color_array[0], light2_color_array[1], light2_color_array[2], light2_color_array[3]);
+    light_colors[2] = glm::vec4(light3_color_array[0], light3_color_array[1], light3_color_array[2], light3_color_array[3]);
 
     ImGui::End();
 }

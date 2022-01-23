@@ -26,13 +26,28 @@ layout (std140, binding = 0) uniform CameraData
 out VertexData
 {
 	vec4 position_vs;  // The particle position in view space.
+	float particle_size_vs;
+	float particle_rotation_vs;
 } out_data;
+
+const float PI = 3.14159265359f;
+
+float hash13(vec3 p3)
+{
+	p3  = fract(p3 * .1031);
+    p3 += dot(p3, p3.zyx + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
 
 // ----------------------------------------------------------------------------
 // Main Method
 // ----------------------------------------------------------------------------
 void main()
 {
+	float size_factor = hash13(start_position.xyz) * 0.5f + 0.5f;
+	out_data.particle_size_vs = particle_size_vs * size_factor;
+	out_data.particle_rotation_vs = hash13(start_position.xyz) * 2 * PI;
+
 	vec4 new_position = start_position;
 	new_position.y -= time * 0.001f;
 	new_position.y = mod(new_position.y, 60.0f) - 1.0f;

@@ -22,5 +22,10 @@ layout (location = 0) out vec4 final_color;
 // ----------------------------------------------------------------------------
 void main()
 {
-	final_color = texture(particle_texture, in_data.tex_coord);
+	vec4 color = texture(particle_texture, in_data.tex_coord);
+	if (color.a == 0) {
+		discard;
+	} else {
+		final_color = color;
+	}
 }

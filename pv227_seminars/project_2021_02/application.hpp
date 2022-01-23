@@ -100,6 +100,14 @@ protected:
     /** The flag determining if an rectangular area light should be used. */
     bool corrective_rectangular_area_light = false;
 
+    
+
+    float light1_color_array[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    float light2_color_array[4] = { 1.0f, 1.0f, 1.0f, 1.0f};
+    float light3_color_array[4] = { 1.0f, 1.0f, 1.0f, 1.0f};
+
+    glm::vec4 light_colors[3];
+
     // ----------------------------------------------------------------------------
     // Constructors
     // ----------------------------------------------------------------------------

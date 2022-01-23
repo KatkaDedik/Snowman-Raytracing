@@ -29,6 +29,8 @@ const vec4 quad_offsets[4] = vec4[4](
 in VertexData
 {
 	vec4 position_vs;  // The particle position in view space.
+	float particle_size_vs;
+	float particle_rotation_vs;
 } in_data[1];
 
 // The UBO with camera data.	
@@ -43,7 +45,6 @@ layout (std140, binding = 0) uniform CameraData
 };
 
 // The size of a particle in view space.
-uniform float particle_size_vs;
 uniform float time;
 
 // ----------------------------------------------------------------------------
@@ -53,6 +54,7 @@ out VertexData
 {
 	vec2 tex_coord;    // The texture coordinates for the particle.
 } out_data;
+
 
 // ----------------------------------------------------------------------------
 // Main Method
@@ -66,8 +68,14 @@ void main()
 	//         Also, texture coordinates and offsets of each of the quad vertex is in quad_tex_coords and quad_offsets arrays, in order they should be emitted.
 	for (int i = 0; i < 4; i++)
 	{
+		float angle = in_data[0].particle_rotation_vs;
+		mat4 particle_rotation = mat4(
+			cos(angle), sin(angle), 0, 0,
+			-sin(angle), cos(angle), 0, 0,
+			0, 0, 0, 0,
+			0, 0, 0, 1);
 		out_data.tex_coord = quad_tex_coords[i];
-		gl_Position = projection * (in_data[0].position_vs + particle_size_vs * quad_offsets[i]);
+		gl_Position = projection * (in_data[0].position_vs + in_data[0].particle_size_vs * quad_offsets[i] * particle_rotation);
 		EmitVertex();
 	}
 }
